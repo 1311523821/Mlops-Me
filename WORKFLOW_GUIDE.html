@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLOps 工作流 — 完整使用指南</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --red: #f85149;
+    --code-bg: #1c2128;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+    line-height: 1.7; max-width: 960px; margin: 0 auto; padding: 40px 20px;
+  }
+  h1 { font-size: 2em; border-bottom: 2px solid var(--accent); padding-bottom: 10px; margin-bottom: 10px; }
+  h2 { font-size: 1.5em; margin: 40px 0 16px; color: var(--accent); }
+  h3 { font-size: 1.15em; margin: 24px 0 12px; color: var(--text); }
+  p { margin: 10px 0; color: var(--muted); }
+  strong { color: var(--text); }
+  code {
+    background: var(--code-bg); padding: 2px 6px; border-radius: 4px;
+    font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+    font-size: 0.9em; color: var(--orange);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px; overflow-x: auto;
+    font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+    font-size: 0.85em; line-height: 1.6;
+    margin: 12px 0;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 24px; margin: 16px 0;
+  }
+  .card h3 { margin-top: 0; }
+  .step { display: flex; gap: 16px; align-items: flex-start; margin: 12px 0; }
+  .step-num {
+    background: var(--accent); color: #fff; border-radius: 50%;
+    width: 32px; height: 32px; min-width: 32px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.9em;
+  }
+  .step-content { flex: 1; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td {
+    text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border);
+    font-size: 0.9em;
+  }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 0.78em; font-weight: 600;
+  }
+  .badge-yes { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-no  { background: rgba(248,81,73,0.15); color: var(--red); }
+  .flow-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+  .flow-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px; flex: 1; min-width: 140px;
+    text-align: center;
+  }
+  .flow-box .cmd { color: var(--green); font-weight: 600; font-family: monospace; margin-bottom: 6px; }
+  .flow-box .desc { color: var(--muted); font-size: 0.85em; }
+  .flow-arrow { font-size: 1.5em; color: var(--accent); align-self: center; }
+  .tip {
+    background: rgba(88,166,255,0.08); border-left: 3px solid var(--accent);
+    padding: 10px 16px; margin: 12px 0; border-radius: 0 6px 6px 0;
+    color: var(--accent); font-size: 0.9em;
+  }
+  .warn {
+    background: rgba(210,153,29,0.08); border-left: 3px solid var(--orange);
+    padding: 10px 16px; margin: 12px 0; border-radius: 0 6px 6px 0;
+    color: var(--orange); font-size: 0.9em;
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+</style>
+</head>
+<body>
+
+<h1> MLOps 工作流 — 完整使用指南</h1>
+<p style="font-size:1.05em">
+  一套轻量级、单 GPU 的深度学习项目管理工具。<br>
+  核心目标：<strong>快速验证想法</strong> + <strong>训练记录自动归档</strong>。
+</p>
+
+<!-- ============================================================ -->
+<h2>1. 核心概念</h2>
+
+<div class="flow-row">
+  <div class="flow-box"><div class="cmd">train.py</div><div class="desc">训练模型</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><div class="cmd">evaluate.py</div><div class="desc">评估 + 画图</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><div class="cmd">export.py</div><div class="desc">导出 ONNX</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><div class="cmd">deploy/app.py</div><div class="desc">推理服务</div></div>
+</div>
+
+<p>每一步自动写入 <code>mlflow.db</code>，通过 <code>mlflow ui</code> 在浏览器查看所有训练记录。</p>
+
+<table>
+<tr><th>文件/目录</th><th>你需不需要改</th><th>说明</th></tr>
+<tr><td><code>core/</code></td><td><span class="badge badge-no">不改</span></td><td>框架基础设施（trainer、registry、utils），通用代码</td></tr>
+<tr><td><code>tasks/</code></td><td><span class="badge badge-yes">要改</span></td><td>你的任务代码（模型 + 数据集），这是你主要写代码的地方</td></tr>
+<tr><td><code>config.yaml</code></td><td><span class="badge badge-yes">要改</span></td><td>项目名、路径、超参数</td></tr>
+<tr><td><code>train.py</code></td><td><span class="badge badge-no">不改</span></td><td>入口脚本，通用编排器</td></tr>
+<tr><td><code>evaluate.py</code></td><td><span class="badge badge-no">不改</span></td><td>评估脚本，通用</td></tr>
+<tr><td><code>export.py</code></td><td><span class="badge badge-no">不改</span></td><td>ONNX 导出，通用</td></tr>
+<tr><td><code>deploy/</code></td><td><span class="badge badge-yes">可能改</span></td><td>如需自定义预处理/后处理，改 app.py</td></tr>
+<tr><td><code>mlflow.db</code></td><td><span class="badge badge-no">不改</span></td><td>MLflow 自动管理，你只看浏览器里的 UI</td></tr>
+<tr><td><code>mlruns/</code></td><td><span class="badge badge-no">不看</span></td><td>MLflow 内部用的临时目录，无视它</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>2. 新建一个自己的项目</h2>
+
+<p>假设你要做一个<strong>红外小目标检测</strong>项目，只需要 3 步。</p>
+
+<div class="card">
+<h3>第 1 步：创建任务目录</h3>
+<pre>cp -r tasks/demo tasks/<strong>ir_detection</strong></pre>
+<p>把 demo 复制一份，改名为你的项目名。目录结构：</p>
+<pre>tasks/ir_detection/
+├── __init__.py          # 空文件，标记这是一个 Python 包
+├── model.py             # 在这里写你的模型
+└── dataset.py           # 在这里写你的数据加载逻辑</pre>
+</div>
+
+<div class="card">
+<h3>第 2 步：写你的模型（model.py）</h3>
+<p>把 demo 的例子替换成你自己的模型：</p>
+<pre><strong>from core.base_model import BaseModel
+from core.registry import register_model
+
+@register_model("ir_resnet")  # ← 给模型起个名字</strong>
+class IRDetectionModel(BaseModel):
+    def __init__(self, num_classes=2):
+        super().__init__()
+        # ===== 你的模型结构写在这里 =====
+        self.backbone = ...
+        self.head = ...
+        # ================================
+
+    def forward(self, x):
+        return self.head(self.backbone(x))
+
+    def get_example_input(self):
+        <strong>import torch
+        return torch.randn(1, 3, 256, 256)  # ← 改成你的输入尺寸</strong>
+
+    @classmethod
+    def from_config(cls, config):
+        # 从 config 里读参数，构建模型
+        return cls(num_classes=config.get("_num_classes", 2))</pre>
+
+<div class="tip">关键：<code>@register_model("ir_resnet")</code> 装饰器把模型注册到全局注册表，之后 <code>train.py</code> 就能通过名字找到它。</div>
+</div>
+
+<div class="card">
+<h3>第 3 步：写你的数据加载（dataset.py）</h3>
+<pre><strong>from core.base_dataset import BaseDataset
+from core.registry import register_dataset
+
+@register_dataset("ir_dataset")  # ← 给数据集起个名字</strong>
+class IRDataset(BaseDataset):
+    CLASS_NAMES = ["背景", "目标"]
+
+    def __init__(self, data_dir, train=True, data_fraction=1.0):
+        # ===== 加载你的数据 =====
+        self.samples = load_your_data(data_dir, train)
+        if data_fraction &lt; 1.0:
+            n = int(len(self.samples) * data_fraction)
+            self.samples = self.samples[:n]
+        self.transform = get_your_transforms(train)
+
+    @property
+    def num_classes(self):
+        return 2  # ← 你的类别数
+
+    def __len__(self): return len(self.samples)
+    def __getitem__(self, idx):
+        img, label = self.samples[idx]
+        return self.transform(img), label
+
+    @classmethod
+    def from_config(cls, config, split):
+        return cls(
+            data_dir=config["paths"]["data_dir"],
+            train=(split == "train"),
+            data_fraction=config.get("_data_fraction", 1.0),
+        )</pre>
+</div>
+
+<!-- ============================================================ -->
+<h2>3. 修改配置文件</h2>
+
+<div class="card">
+<p>打开 <code>config.yaml</code>，改这几处：</p>
+
+<pre><span style="color:var(--muted)"># 项目元信息</span>
+project:
+  name: <strong>"ir-detection"</strong>            <span style="color:var(--muted)"># 改成你的项目名</span>
+  tags:
+    framework: "pytorch"
+    owner: <strong>"your-name"</strong>
+
+<span style="color:var(--muted)"># 全量训练用这个模型</span>
+full:
+  model_name: <strong>"ir_resnet"</strong>           <span style="color:var(--muted)"># 和 @register_model 的名字一致</span>
+  epochs: 100
+  batch_size: 32
+
+<span style="color:var(--muted)"># 快速验证用这个</span>
+fast:
+  model_name: <strong>"ir_resnet"</strong>
+  epochs: 3
+  batch_size: 16
+  data_fraction: 0.1</pre>
+</div>
+
+<!-- ============================================================ -->
+<h2>4. 完整工作流</h2>
+
+<div class="card">
+<h3>Step 1：快速验证（2 分钟）</h3>
+<pre>python train.py --task ir_detection --fast</pre>
+<p>用 10% 数据、3 epoch 快速跑通，确认没有 bug。</p>
+<p>输出：</p>
+<pre>计算数据指纹...
+数据指纹 (MD5): a1b2c3d4...           ← 数据集版本标记
+============================================================
+任务: ir_detection  |  模型: ir_resnet
+数据集: ir_dataset  |  类别数: 2
+设备: cuda:0  |  模式: 快速模式
+训练集大小: 600  |  批大小: 16
+Epochs: 3
+============================================================
+Epoch   1/3 | train_loss: 0.xx | val_loss: 0.xx | val_acc: 0.xx</pre>
+</div>
+
+<div class="card">
+<h3>Step 2：查看 MLflow 记录</h3>
+<pre><span style="color:var(--muted)"># 启动 MLflow UI（如果还没启动）</span>
+mlflow server --backend-store-uri sqlite:///mlflow.db --port 5000
+
+<span style="color:var(--muted)"># 浏览器打开</span>
+http://127.0.0.1:5000</pre>
+<p>在 UI 里你能看到：</p>
+<ul style="color:var(--muted); margin-left:20px;">
+  <li>实验列表（左侧）→ 选 <strong>ir-detection</strong></li>
+  <li>训练曲线：val_accuracy ↑、train_loss ↓</li>
+  <li>参数：learning_rate、batch_size、model_name ...</li>
+  <li>标签：data_fingerprint、framework、task ...</li>
+  <li>模型文件：best_model.pth（可下载）</li>
+</ul>
+</div>
+
+<div class="card">
+<h3>Step 3：全量训练</h3>
+<pre>python train.py --task ir_detection</pre>
+<p>用全部数据、完整 epoch 训练。自动记录到同一个实验下，方便对比。</p>
+</div>
+
+<div class="card">
+<h3>Step 4：评估</h3>
+<pre>python evaluate.py --task ir_detection</pre>
+<p>生成：</p>
+<ul style="color:var(--muted); margin-left:20px;">
+  <li>测试集准确率 + 分类报告（precision / recall / f1）</li>
+  <li><code>outputs/ir_detection/comparison.png</code> — 当前 vs 历史最佳对比图</li>
+  <li><code>outputs/ir_detection/confusion_matrix.png</code> — 混淆矩阵</li>
+</ul>
+</div>
+
+<div class="card">
+<h3>Step 5：导出 ONNX</h3>
+<pre>python export.py --task ir_detection</pre>
+<p>输出 <code>outputs/ir_detection/model.onnx</code>，打印 PyTorch vs ONNX 的精度差异。</p>
+</div>
+
+<div class="card">
+<h3>Step 6：部署推理服务</h3>
+<pre>python deploy/app.py --model outputs/ir_detection/model.onnx</pre>
+<table>
+<tr><th>端点</th><th>说明</th></tr>
+<tr><td><code>GET /health</code></td><td>健康检查 → <code>{"status":"ok"}</code></td></tr>
+<tr><td><code>POST /predict</code></td><td>上传图片文件推理 → <code>curl -X POST -F "file=@test.png" ...</code></td></tr>
+<tr><td><code>GET /predict?url=xxx</code></td><td>通过图片 URL 推理</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2>5. 日常使用流程总结</h2>
+
+<div class="flow-row">
+  <div class="flow-box"><div class="cmd">改模型/数据</div><div class="desc">tasks/ir_detection/</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><div class="cmd">--fast</div><div class="desc">快速跑通</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><div class="cmd">mlflow ui</div><div class="desc">看结果</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><div class="cmd">全量训练</div><div class="desc">出最终模型</div></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><div class="cmd">evaluate + export</div><div class="desc">评估+部署</div></div>
+</div>
+
+<div class="tip">
+  <strong>核心哲学</strong>：<code>--fast</code> 是你的快速实验开关。每次改完模型，先 <code>--fast</code> 跑 2 分钟验证没有崩溃，再 <code>mlflow ui</code> 看曲线，确认效果变好了才全量训练。不浪费时间在烂 idea 上。
+</div>
+
+<!-- ============================================================ -->
+<h2>6. 数据指纹是什么？</h2>
+
+<p>
+每次训练前，系统自动对数据集前 100 个样本计算 MD5 哈希，记录在 MLflow 标签里。
+</p>
+<ul style="color:var(--muted); margin-left:20px;">
+  <li><strong>数据不变 → 指纹相同</strong>：可以对比不同超参数在同一份数据上的效果</li>
+  <li><strong>数据变了 → 指纹不同</strong>：如果某次训练效果异常，先查指纹是不是换了数据</li>
+</ul>
+<p>
+这是 MLOps 的<strong>数据版本管理</strong>最简实现——不需要 DVC 之类重工具，一行哈希就够个人用了。
+</p>
+
+<!-- ============================================================ -->
+<h2>7. 常见问题</h2>
+
+<div class="warn">
+  <strong>Q: mlruns/ 下面没有 meta.yaml，是不是坏了？</strong><br>
+  A: 不是。用了 SQLite 后实验信息存在 <code>mlflow.db</code> 里，<code>mlruns/</code> 只是放模型文件的筐。一切看 <code>http://127.0.0.1:5000</code> 就行。
+</div>
+
+<div class="warn">
+  <strong>Q: 怎么对比两次训练的曲线？</strong><br>
+  A: MLflow UI 里按住 Ctrl 点选两次 run，右侧自动叠图对比所有指标。
+</div>
+
+<div class="warn">
+  <strong>Q: deploy/app.py 预处理和训练时不一样怎么办？</strong><br>
+  A: <code>app.py</code> 里的 <code>TRANSFORM</code> 变量需要和 <code>dataset.py</code> 里的 transform 保持一致（均值、标准差、缩放尺寸）。目前硬编码在 app.py 中，复杂场景需要各自维护。
+</div>
+
+<div class="warn">
+  <strong>Q: 我要同时管理红外和声纳两个项目？</strong><br>
+  A: 改 <code>config.yaml</code> 里的 <code>project.name</code> 即可。每次训练时会以这个名字创建/使用 MLflow 实验。或者在命令行传入不同 config：
+  <pre>python train.py --task ir_detection --config config_ir.yaml
+python train.py --task sonar_3d    --config config_sonar.yaml</pre>
+</div>
+
+<hr>
+<p style="text-align:center; color:var(--muted); font-size:0.85em;">
+  MLOps Workflow — 个人深度学习工作流
+</p>
+
+</body>
+</html>

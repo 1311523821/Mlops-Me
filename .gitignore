@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 数据
+data/
+datasets/
+
+# 输出
+outputs/
+
+# MLflow
+mlflow.db
+mlruns/
+
+# 环境
+.env
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db

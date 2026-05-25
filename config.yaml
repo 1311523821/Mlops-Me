@@ -1,0 +1,52 @@
+# ============================================================
+# MLOps 工作流 — 全局配置文件
+# ============================================================
+
+# ---------- 项目元信息 ----------
+# 每次训练时自动记录到 MLflow，用于区分不同项目
+project:
+  name: "mlops-workflow"       # 项目名称，对应 MLflow 实验名
+  description: "通用深度学习工作流"
+  tags:
+    framework: "pytorch"
+    owner: "default"
+
+# ---------- 路径配置 ----------
+paths:
+  data_dir: "./data"           # 数据集存放目录（MNIST 等会自动下载到这里）
+  output_dir: "./outputs"      # 模型、图表、ONNX 文件的输出根目录
+  mlflow_uri: "sqlite:///mlflow.db"  # MLflow 追踪数据库（SQLite 后端）
+
+# ---------- 设备配置 ----------
+device:
+  gpu_id: 0                   # GPU 编号（单 GPU 场景默认为 0）
+  use_cuda: true              # 是否使用 CUDA（无 GPU 时自动回退 CPU）
+
+# ---------- 快速验证模式 ----------
+# 触发方式: python train.py --task xxx --fast
+fast:
+  data_fraction: 0.1          # 只使用 10% 的训练数据
+  epochs: 3                   # 只训练 3 个 epoch
+  batch_size: 32
+  model_name: "simple_cnn"    # 使用轻量模型
+  dataset_name: ""            # 留空则自动选第一个已注册的数据集
+
+# ---------- 全量训练模式 ----------
+# 触发方式: python train.py --task xxx（不加 --fast）
+full:
+  data_fraction: 1.0          # 使用全部数据
+  epochs: 50                  # 完整训练
+  batch_size: 64
+  model_name: "resnet18"
+  dataset_name: ""            # 留空则自动选第一个已注册的数据集
+
+# ---------- 训练超参数 ----------
+training:
+  learning_rate: 0.001
+  optimizer: "adam"           # "adam" 或 "sgd"
+  weight_decay: 0.0001
+  early_stopping_patience: 10
+
+# ---------- ONNX 导出配置 ----------
+export:
+  onnx_opset: 14              # ONNX opset 版本
