@@ -47,6 +47,14 @@ training:
   weight_decay: 0.0001
   early_stopping_patience: 10
 
+# ---------- 分割任务参数（sonar_detection 等） ----------
+segmentation:
+  num_frame: 4                # 输入帧数（LVNet 多帧输入）
+  img_size: 512               # 图像尺寸
+  train_split: "train1.txt"   # 训练集标注文件
+  val_split: "val_new.txt"    # 验证集标注文件
+  test_split: "val_new.txt"   # 测试集标注文件
+
 # ---------- ONNX 导出配置 ----------
 export:
   onnx_opset: 14              # ONNX opset 版本

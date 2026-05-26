@@ -179,13 +179,19 @@ def main():
     model.to(device)
     model.eval()
 
+    task_type = getattr(model, "task_type", "classification")
+
     print(f"{'='*60}")
-    print(f"评估任务: {args.task}")
+    print(f"评估任务: {args.task}  |  类型: {task_type}")
     print(f"模型: {model_name}  |  设备: {device}")
     print(f"测试集大小: {len(test_dataset)}")
     if info["epoch"] >= 0:
+        best_key = "loss" if task_type == "segmentation" else "accuracy"
+        best_val = info['metrics'].get(best_key,
+                     info['metrics'].get('accuracy',
+                     info['metrics'].get('loss', 0)))
         print(f"加载的模型来自 Epoch {info['epoch']}，"
-              f"val_accuracy={info['metrics'].get('accuracy', 0):.4f}")
+              f"val_{best_key}={best_val:.4f}")
     print(f"{'='*60}")
 
     # ---------- 6. 在测试集上评估 ----------
@@ -193,40 +199,56 @@ def main():
     all_labels = []
     correct = 0
     total = 0
+    # 分割指标
+    seg_intersection = 0.0
+    seg_union = 0.0
 
     with torch.no_grad():
         for inputs, targets in test_loader:
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = model(inputs)
-            _, predicted = outputs.max(1)
 
-            correct += predicted.eq(targets).sum().item()
-            total += targets.size(0)
+            if task_type == "classification":
+                _, predicted = outputs.max(1)
+                correct += predicted.eq(targets).sum().item()
+                total += targets.size(0)
+                all_preds.extend(predicted.cpu().numpy())
+                all_labels.extend(targets.cpu().numpy())
+            elif task_type == "segmentation":
+                pred = (torch.sigmoid(outputs) > 0.5).float()
+                # 对逐帧输出取平均或选中间帧
+                if pred.dim() == 5:
+                    pred = pred[:, :, pred.shape[2] // 2]  # 取中间帧
+                if targets.dim() == pred.dim() - 1:
+                    targets = targets.unsqueeze(1)
+                seg_intersection += (pred * targets).sum().item()
+                seg_union += (pred + targets).clamp(0, 1).sum().item()
 
-            all_preds.extend(predicted.cpu().numpy())
-            all_labels.extend(targets.cpu().numpy())
-
-    accuracy = correct / total if total > 0 else 0.0
-    print(f"\n测试准确率: {accuracy:.4f} ({correct}/{total})")
-
-    # ---------- 7. 打印分类报告 ----------
     class_names = getattr(test_dataset, "CLASS_NAMES",
                           [str(i) for i in range(test_dataset.num_classes)])
-    print("\n分类报告:")
-    print(classification_report(
-        all_labels, all_preds,
-        labels=range(min(test_dataset.num_classes, len(class_names))),
-        target_names=class_names[:test_dataset.num_classes],
-        zero_division=0))
+    if task_type == "classification":
+        accuracy = correct / total if total > 0 else 0.0
+        print(f"\n测试准确率: {accuracy:.4f} ({correct}/{total})")
+        print("\n分类报告:")
+        print(classification_report(
+            all_labels, all_preds,
+            labels=range(min(test_dataset.num_classes, len(class_names))),
+            target_names=class_names[:test_dataset.num_classes],
+            zero_division=0))
+    elif task_type == "segmentation":
+        iou = seg_intersection / (seg_union + 1e-7)
+        print(f"\n测试 IoU: {iou:.4f}")
+        accuracy = iou  # 用于后续对比
 
     # ---------- 8. 对比历史最佳 ----------
     mlflow_uri = config.get("paths", {}).get("mlflow_uri", "./mlruns")
     best_historical = get_best_historical_accuracy(args.task, mlflow_uri)
-    print(f"\n历史最佳准确率: {best_historical:.4f}")
-    print(f"当前模型准确率: {accuracy:.4f}")
+    metric_name = "IoU" if task_type == "segmentation" else "准确率"
+    print(f"\n历史最佳{metric_name}: {best_historical:.4f}")
+    print(f"当前模型{metric_name}: {accuracy:.4f}")
 
     if accuracy >= best_historical > 0:
-        print("结果: 当前模型达到/超越历史最佳!")
+        print(f"结果: 当前模型达到/超越历史最佳!")
     elif best_historical == 0:
         print("结果: 这是本任务的第一次评估")
     else:
@@ -234,8 +256,9 @@ def main():
 
     # ---------- 9. 生成图表 ----------
     plot_comparison(accuracy, best_historical, args.task, output_dir)
-    plot_confusion_matrix(all_labels, all_preds, class_names,
-                          args.task, output_dir)
+    if task_type == "classification" and all_labels:
+        plot_confusion_matrix(all_labels, all_preds, class_names,
+                              args.task, output_dir)
 
     print(f"\n所有结果保存在: {output_dir}/")
 

@@ -36,6 +36,15 @@ def main():
     # ---------- 1. 加载配置 ----------
     config = load_config(args.config)
 
+    # 传递任务特定参数（分割任务的帧数、图像尺寸等）
+    seg_cfg = config.get("segmentation", {})
+    if seg_cfg:
+        config.setdefault("_num_frame", seg_cfg.get("num_frame", 4))
+        config.setdefault("_img_size", seg_cfg.get("img_size", 512))
+        config.setdefault("_train_split", seg_cfg.get("train_split", "train1.txt"))
+        config.setdefault("_val_split", seg_cfg.get("val_split", "val_new.txt"))
+        config.setdefault("_test_split", seg_cfg.get("test_split", "val_new.txt"))
+
     # ---------- 2. --fast 模式覆盖参数 ----------
     if args.fast:
         fast_cfg = config.get("fast", {})
