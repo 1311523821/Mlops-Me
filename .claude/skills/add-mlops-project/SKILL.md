@@ -9,6 +9,11 @@ description: |
 
 # 把外部项目集成到 MLOps 工作流
 
+## 核心原则
+
+**不要硬编码参数。** 所有配置值都从原代码分析出来，MLOps 只做包装不做假设。
+参数名、参数值、输入形状、预处理参数 — 一切以原项目为准。
+
 ## 流程概览
 
 ```
@@ -18,31 +23,23 @@ description: |
 
 ## 步骤 1：分析项目
 
-先拉取项目，理解 3 个关键点：
+先拉取项目，回答以下问题：
 
 ```bash
 git clone --depth 1 <repo-url> /tmp/project
 ```
 
-**必须弄清楚：**
+| 问题 | 去哪里找 | 怎么确定 |
+|------|----------|----------|
+| 模型类名和构造函数参数？ | `class XXX(nn.Module)` | 看 `__init__` 的签名，每个参数的值从默认值或 argparse 中取 |
+| 输入形状？ | `forward()` 第一行 + 训练循环 | 打印第一个 batch 的 shape，或看 Dataset 的 `__getitem__` |
+| 输出形状？ | `forward()` 最后一行 | `print(output.shape)` |
+| 任务类型？ | 损失函数 | CrossEntropyLoss → classification；BCE/Dice/IoU → segmentation |
+| 数据格式？ | Dataset 类或训练脚本 | txt/json/文件夹结构 → 决定 dataset.py 怎么读 |
+| 本地依赖？ | import 语句 | 非 pip 安装的 `.py` 文件都要复制 |
+| 预处理参数？ | Dataset 的 transform | mean、std、resize 尺寸，全部从原代码提取 |
 
-| 问题 | 去哪里找 |
-|------|----------|
-| 模型类名是什么？构造函数参数？ | 找 `class XXX(nn.Module)` |
-| 输入输出形状？ | 看 `forward()` 和训练循环 |
-| 任务类型？ | 分类=CrossEntropyLoss/accuracy，分割=BCE/Dice/IoU |
-| 数据怎么加载？ | 找 Dataset 类或训练脚本中的数据读取逻辑 |
-| 有哪些依赖文件？ | 看 import 语句，识别本地模块 |
-
-**关键判断：task_type**
-
-```python
-# 分类 → task_type = "classification"
-# 输出是 (B, num_classes)，用 accuracy 评估
-
-# 分割 → task_type = "segmentation"
-# 输出是 (B, C, H, W)，用 IoU 评估
-```
+**关键：不要猜测，全部从原代码中复制。**
 
 ## 步骤 2：创建任务目录
 
@@ -50,13 +47,15 @@ git clone --depth 1 <repo-url> /tmp/project
 mkdir -p tasks/<task_name>
 ```
 
-三个文件：
+最终结构：
 
 ```
 tasks/<task_name>/
-├── __init__.py    # 声明默认模型和数据集
-├── model.py       # 包装外部模型
-└── dataset.py     # 包装数据加载
+├── __init__.py       # 声明默认模型和数据集
+├── model.py          # 包装外部模型
+├── dataset.py        # 包装数据加载
+├── config.yaml       # 任务级配置（从原代码参数生成）
+└── <外部依赖文件>.py  # 原项目的本地模块
 ```
 
 ## 步骤 3：写 __init__.py
@@ -66,119 +65,125 @@ DEFAULT_DATASET = "your_dataset_name"
 DEFAULT_MODEL = "your_model_name"
 ```
 
-这两个常量让 `train.py` 在未指定模型/数据集时有合理的默认值。
-
 ## 步骤 4：写 model.py
 
-**模板（分类任务）：**
+核心任务：把外部模型包装成 `BaseModel`，让 Trainer 能自动获取 loss 和任务类型。
+
+**第一步：从原代码提取构造函数参数**
+
+打开原项目的模型文件，找到 `__init__` 签名，把每个参数抄下来作为 wrapper 的 `__init__` 参数，默认值保持一致。
+
+**第二步：确定 task_type**
+
+| 原代码用的 loss | task_type | get_loss_fn 返回 |
+|----------------|-----------|-----------------|
+| CrossEntropyLoss | `"classification"` | 不需要重写（默认） |
+| BCEWithLogitsLoss | `"segmentation"` | DiceLoss 或自定义 |
+| DiceLoss / FocalLoss | `"segmentation"` | 原项目的 loss 类 |
+
+**第三步：确定输入形状**
+
+从原项目的 Dataset `__getitem__` 或训练循环中找到第一个 batch 的 shape，写入 `get_example_input()`。
+
+**模板：**
 
 ```python
 import torch.nn as nn
 from core.base_model import BaseModel
 from core.registry import register_model
 
-@register_model("your_model_name")
+@register_model("从原项目的模型名推断")
 class YourModelWrapper(BaseModel):
-    task_type = "classification"  # ← 声明任务类型
+    task_type = "从原项目的 loss 推断"
 
-    def __init__(self, num_classes=10):
+    def __init__(self, <从原代码 __init__ 签名复制的参数>):
         super().__init__()
-        # 导入并实例化外部模型
+        # 导入外部模型（注意处理本地导入路径问题，见步骤 6）
         from .external_model import ExternalModel
-        self.net = ExternalModel(num_classes=num_classes)
+        self.net = ExternalModel(<参数透传>)
 
     def forward(self, x):
         return self.net(x)
 
     def get_example_input(self):
         import torch
-        return torch.randn(1, 3, 224, 224)  # ← 改成实际输入尺寸
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(num_classes=config.get("_num_classes", 10))
-```
-
-**模板（分割任务）：**
-
-```python
-import torch.nn as nn
-from core.base_model import BaseModel
-from core.registry import register_model
-
-@register_model("your_model_name")
-class YourSegModel(BaseModel):
-    task_type = "segmentation"  # ← 关键区别
-
-    def __init__(self):
-        super().__init__()
-        from .external_model import ExternalModel
-        self.net = ExternalModel()
-
-    def forward(self, x):
-        # 如果数据集输出 5D (B,C,D,H,W) 但模型要 4D，
-        # 在这里做 reshape 适配
-        return self.net(x)
+        # 形状从原项目 Dataset.__getitem__ 或训练循环中获取
+        return torch.randn(<从原代码确定的输入形状>)
 
     def get_loss_fn(self):
-        # 分割任务必须重写此方法
-        return YourCustomLoss()
-
-    def get_example_input(self):
-        import torch
-        return torch.randn(1, 1, 4, 512, 512)
+        # 仅分割任务需要重写；分类任务用默认 CrossEntropyLoss
+        return <从原代码复制的 loss 类>()
 
     @classmethod
     def from_config(cls, config):
-        return cls()
+        # 从 config 中读取参数。键名从原代码 argparse 参数名推断。
+        # 分类任务至少传入 num_classes；分割任务传入原模型的所有构造参数。
+        return cls(<参数映射>)
 ```
 
 **容易踩的坑：**
-- 输入形状不匹配：模型可能要 `(B, C, H, W)` 但数据集给了 `(B, C, D, H, W)`，在 `forward()` 里做 squeeze/reshape
-- 忘记设 `task_type`：默认是 classification，分割任务会计算错误指标
-- 忘记重写 `get_loss_fn()`：默认返回 CrossEntropyLoss，分割任务需要 DiceLoss 等
+- 输入形状不匹配：模型要 4D 但数据集给了 5D，在 `forward()` 里做 reshape
+- 忘记设 `task_type`：默认 classification，分割任务会算错指标
+- 忘记重写 `get_loss_fn()`：默认 CrossEntropyLoss 不能用于分割
+- 外部模型的本地 import 路径：见步骤 6
 
 ## 步骤 5：写 dataset.py
+
+核心任务：把原项目的数据加载逻辑封装成 `BaseDataset`。
+
+**第一步：分析原项目的数据格式**
+
+仔细看原项目的 Dataset 类或训练脚本中的数据读取代码，回答：
+- 数据文件类型？（图片/txt/npy/...）
+- 目录结构？（文件夹分类 / txt 标注路径 / json 标注 / ...）
+- 标签格式？（整数类别 / 二值掩码 / bbox / ...）
+- 预处理参数？（mean、std、resize 尺寸 — 全部从原代码提取）
+
+**第二步：把数据加载逻辑搬进 `__getitem__` 和 `__init__`**
+
+**第三步：`get_preprocess_config()` 返回从原代码提取的预处理参数**
+
+**模板：**
 
 ```python
 from core.base_dataset import BaseDataset
 from core.registry import register_dataset
 
-@register_dataset("your_dataset_name")
+@register_dataset("从原项目推断的名字")
 class YourDataset(BaseDataset):
-    CLASS_NAMES = ["class_0", "class_1", ...]  # 可选
+    # 类别名从原项目获取（如果是分类任务）
+    CLASS_NAMES = <从原代码提取的类别列表>
 
-    def __init__(self, data_dir, train=True, data_fraction=1.0):
+    def __init__(self, data_dir, train=True, data_fraction=1.0,
+                 <从原代码提取的其他参数，如 image_size、标注文件路径等>):
         self.data_dir = data_dir
         self.train = train
-        # 加载数据
-        self.samples = self._load_data(data_dir, train)
+        # 搬运原项目的加载逻辑
+        self.samples = <原项目的数据加载代码>
 
-        # --fast 模式：取子集
         if data_fraction < 1.0:
             n = max(1, int(len(self.samples) * data_fraction))
             self.samples = self.samples[:n]
 
     @property
     def num_classes(self):
-        return len(self.CLASS_NAMES)  # 分割任务返回 2（背景+目标）
+        return <从原代码确定的类别数>
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        # 返回 (input, target)
-        # 分类：return image, label
-        # 分割：return frames, mask
+        # 搬运原项目的 __getitem__ 逻辑
+        # 返回 (input_tensor, target_tensor)
         ...
 
     def get_preprocess_config(self):
-        """返回推理预处理参数，export.py 会自动保存为 preprocess.json"""
+        """返回推理预处理参数，所有值从原代码提取"""
         return {
-            "mean": [0.5, 0.5, 0.5],
-            "std": [0.5, 0.5, 0.5],
-            "size": [224, 224],
-            "channels": 3,
+            "mean": <从原代码 transform 提取>,
+            "std": <从原代码 transform 提取>,
+            "size": <从原代码 resize 提取>,
+            "channels": <从原代码输入通道数提取>,
             "classes": self.CLASS_NAMES,
         }
 
@@ -188,96 +193,82 @@ class YourDataset(BaseDataset):
             data_dir=config["paths"]["data_dir"],
             train=(split == "train"),
             data_fraction=config.get("_data_fraction", 1.0),
+            <透传其他参数>,
         )
 ```
 
-**from_config 的三个 split 值：**
-- `"train"` → 训练集
-- `"val"` → 验证集
-- `"test"` → 测试集（evaluate.py 用）
-
 ## 步骤 6：复制依赖文件
 
-如果外部项目有本地模块依赖（不是 pip 包的），复制到 `tasks/<task_name>/` 下：
+检查原项目的 import 语句，把非 pip 包的本地 `.py` 文件复制到 `tasks/<task_name>/` 下。
 
-```bash
-cp /tmp/project/external_model.py tasks/<task_name>/
-cp /tmp/project/utils.py tasks/<task_name>/
-```
-
-然后在 model.py/dataset.py 中用 **相对导入**：
+**如果外部模块内部有绝对导入**（如 `from LVNet import xxx`），在 `model.py` 的 `__init__` 开头加入：
 
 ```python
-from .external_model import ExternalModel  # 正确
-from external_model import ExternalModel   # 错误，找不到
+import sys, os
+_here = os.path.dirname(os.path.abspath(__file__))
+if _here not in sys.path:
+    sys.path.insert(0, _here)
+from ExternalModule import ExternalModel
 ```
 
 ## 步骤 7：创建任务级配置文件
 
-**不要改全局 `config.yaml`**。在任务目录下创建 `tasks/<name>/config.yaml`：
+**不要改全局 `config.yaml`**。创建 `tasks/<task_name>/config.yaml`：
+
+1. **fast/full 段**：必填 `model_name` 和 `dataset_name`（与注册名一致）。其他如 `epochs`、`batch_size`、`data_fraction` 按需覆盖全局默认值。
+
+2. **模型参数段**：如果原项目通过 argparse 传入大量模型构造参数（消融实验），用 `model_params` 段存放，字段名和原 argparse 参数名保持一致。
+
+3. **分割参数段**：如果是分割任务且有多帧/标注文件等参数，用 `segmentation` 段存放，字段名从原代码推断。
+
+**原则：config 里的字段名反映原项目的参数名，不做翻译。原代码叫什么，config 里就叫什么。**
 
 ```yaml
 # tasks/your_task/config.yaml
 
-# 快速验证模式默认值
 fast:
-  model_name: "your_model_name"     # 和 @register_model 一致
-  dataset_name: "your_dataset_name"  # 和 @register_dataset 一致
-  epochs: 3
-  batch_size: 32
+  model_name: "和 @register_model 一致"
+  dataset_name: "和 @register_dataset 一致"
+  epochs: <快速验证 epoch 数，通常 3>
   data_fraction: 0.1
 
-# 全量训练模式默认值
 full:
-  model_name: "your_model_name"
-  dataset_name: "your_dataset_name"
-  epochs: 100
-  batch_size: 32
-  data_fraction: 1.0
-```
+  model_name: "和 @register_model 一致"
+  dataset_name: "和 @register_dataset 一致"
+  epochs: <原项目默认 epoch 数>
 
-**对于分割任务**，额外添加：
+# 以下是按需添加的段，字段名从原代码推断：
 
-```yaml
-# 模型消融参数（每次实验改一个值）
+# 模型构造参数（如果有的话）
 model_params:
-  encoder_type: "stsf"       # 架构变体
-  mlp_type: "conv3d"
-  block_type: "decoupled"
-  use_checkpoint: false
-  drop_path_rate: 0.2
+  <从原 argparse 复制的参数名>: <从原 argparse 复制的默认值>
+  ...
 
-# 数据集分割参数
-segmentation:
-  num_frame: 4               # 输入帧数
-  img_size: 512               # 图像尺寸
-  train_split: "train1.txt"   # 训练标注文件
-  val_split: "val_new.txt"    # 验证标注文件
-  test_split: "val_new.txt"   # 测试标注文件
+# 数据集参数（如果有的话）
+dataset_params:
+  <从原代码复制的参数名>: <值>
+  ...
 
-# 损失函数参数
+# 损失函数参数（如果自定义 loss 有参数）
 loss_params:
-  alpha: 0.5                  # Dice/BCE 权重
+  <参数名>: <值>
+  ...
 ```
 
-配置合并规则：`tasks/<name>/config.yaml` 的值覆盖全局 `config.yaml` 的同名字段。`train.py` / `evaluate.py` / `export.py` 自动合并，无需手动处理。
+配置合并规则：`tasks/<name>/config.yaml` 覆盖 `config.yaml` 同名字段。`train.py`/`evaluate.py`/`export.py` 自动合并。
 
 ## 步骤 8：验证
 
 ```bash
-# 1. 测试导入链
+# 1. 测试导入链和前向传播
 python -c "
 import importlib
 importlib.import_module('tasks.your_task.model')
 importlib.import_module('tasks.your_task.dataset')
 from core.registry import MODELS, DATASETS
-print('Models:', list(MODELS.keys()))
-print('Datasets:', list(DATASETS.keys()))
-# 实例化模型
 m = MODELS['your_model_name']()
 print('task_type:', m.task_type)
 print('loss:', type(m.get_loss_fn()).__name__)
-# 前向传播
 import torch
 x = m.get_example_input()
 with torch.no_grad():
@@ -285,25 +276,26 @@ with torch.no_grad():
 print('Input:', list(x.shape), '→ Output:', list(y.shape))
 "
 
-# 2. 如果有真实数据，快速训练
+# 2. 有数据的话快速训练
 python train.py --task your_task --fast
 ```
 
 ## 真实案例：e2e → sonar_detection
 
-我们集成 LVNet（声纳多帧小目标检测）的完整过程：
+展示如何从原代码分析出所有参数：
 
-**分析：**
-- 模型：`LVNet(nn.Module)`，输入 `(B, C, D, H, W)`，输出 `(B, 1, D, H, W)`
-- 任务：二值分割，用 DiceLoss + BCE
-- 数据：txt 文件列出 DataRecord 文件夹，每文件夹含连续帧图像
+**分析过程：**
+1. 原项目 `LVNet.py` → 模型类 `LVNet(nn.Module)`，`__init__` 有 16 个参数（num_frame、embed_dim、encoder_type...）
+2. 训练脚本用 DiceLoss + BCE → task_type = `"segmentation"`
+3. Dataset 返回 `(D, H, W)` 帧堆叠 + 二值掩码 → 输入 5D
+4. 标注文件 `train1.txt`/`val_new.txt`，每行列出一个 DataRecord 文件夹路径
+5. 依赖：`LVNet.py`、`muon.py`、`sonar_utils.py`
 
-**实现：**
-- `task_type = "segmentation"`，`get_loss_fn()` 返回 `DiceFocalLoss`
-- 数据集 `SonarFrameDataset` 从 txt 读取路径，堆叠 4 帧为输入
-- 输入形状 `(1, 1, 4, 512, 512)`，模型参数量 1.92M
-- 复制 `LVNet.py`、`muon.py`、`sonar_utils.py` 到任务目录
-- **创建 `tasks/sonar_detection/config.yaml`**，内含 `model_params` 消融参数和 `segmentation` 分割参数
+**实现要点：**
+- `task_type = "segmentation"`，`get_loss_fn()` 复制原项目的 DiceFocalLoss
+- Dataset 的 `from_config` 接收 `split`，映射到对应的标注 txt 文件
+- 预处理参数全部从原代码的 transform 提取
+- config.yaml 的 `model_params` 段直接从原 argparse 参数名搬运：`encoder_type`、`mlp_type`、`block_type` 等
+- LVNet.py 内部有 `from LVNet import ...` 绝对导入，在 model.py 里加了 `sys.path` 修复
 
-**结果：** `python train.py --task sonar_detection --fast` 可直接训练，MLflow 自动记录 IoU 指标。
-消融实验只需改 `tasks/sonar_detection/config.yaml` 中 `model_params` 的一个值，MLflow 自动对比。
+**结果：** `python train.py --task sonar_detection --fast` 可直接训练。改 `tasks/sonar_detection/config.yaml` 里 `model_params` 的一个值即可做消融实验，MLflow 自动对比。
