@@ -25,8 +25,9 @@ venv/
 *.swp
 *.swo
 
-# Claude 内部
-.claude/
+# Claude 内部（skill 可以分享）
+.claude/*
+!.claude/skills/
 .spec-workflow/
 
 # 系统
