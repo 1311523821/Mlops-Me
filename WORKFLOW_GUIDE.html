@@ -100,8 +100,9 @@
 <tr><th>文件/目录</th><th>你需不需要改</th><th>说明</th></tr>
 <tr><td><code>core/</code></td><td><span class="badge badge-no">不改</span></td><td>框架基础设施（trainer、registry、utils）</td></tr>
 <tr><td><code>tasks/</code></td><td><span class="badge badge-yes">要改</span></td><td>你的任务代码（模型 + 数据集），这是你主要写代码的地方</td></tr>
-<tr><td><code>config.yaml</code></td><td><span class="badge badge-yes">要改</span></td><td>项目名、路径、超参数、分割参数</td></tr>
-<tr><td><code>train.py</code></td><td><span class="badge badge-no">不改</span></td><td>入口脚本，通用编排器</td></tr>
+<tr><td><code>config.yaml</code></td><td><span class="badge badge-yes">小改</span></td><td>全局公共项（路径、设备），几乎不动</td></tr>
+<tr><td><code>tasks/xxx/config.yaml</code></td><td><span class="badge badge-yes">要改</span></td><td>任务级配置：模型、数据集、消融参数</td></tr>
+<tr><td><code>train.py</code></td><td><span class="badge badge-no">不改</span></td><td>入口脚本，自动合并全局+任务配置</td></tr>
 <tr><td><code>evaluate.py</code></td><td><span class="badge badge-no">不改</span></td><td>评估脚本，自动适配分类/分割</td></tr>
 <tr><td><code>export.py</code></td><td><span class="badge badge-no">不改</span></td><td>ONNX 导出，自动附带 preprocess.json</td></tr>
 <tr><td><code>deploy/</code></td><td><span class="badge badge-no">不改</span></td><td>自动读取 preprocess.json，无需手工调 transform</td></tr>
@@ -124,7 +125,61 @@
 </div>
 
 <!-- ============================================================ -->
-<h2>3. 新建一个分类项目</h2>
+<h2>3. 配置层级</h2>
+
+<p>配置文件分两级，全局和任务各自维护：</p>
+
+<pre>config.yaml                   ← 全局公共项（路径、设备、MLflow）
+tasks/<strong>demo</strong>/config.yaml         ← demo 的 fast/full 默认值
+tasks/<strong>sonar_detection</strong>/config.yaml  ← LVNet 消融参数</pre>
+
+<p><strong>合并规则：</strong>任务级配置覆盖全局配置的同名字段。<code>train.py</code> 自动合并，你不需要手动处理。</p>
+
+<div class="card">
+<h3>全局 config.yaml（尽量不动）</h3>
+<pre>project:
+  name: "mlops-workflow"
+paths:
+  data_dir: "./data"
+  output_dir: "./outputs"
+  mlflow_uri: "sqlite:///mlflow.db"
+device:
+  gpu_id: 0
+  use_cuda: true
+training:
+  learning_rate: 0.001
+  optimizer: "adam"</pre>
+</div>
+
+<div class="card">
+<h3>任务 config.yaml（经常改）</h3>
+<pre><span style="color:var(--muted)"># tasks/sonar_detection/config.yaml</span>
+
+fast:
+  model_name: "lvnet_tiny"
+  dataset_name: "sonar_e2e"
+  batch_size: 1         <span style="color:var(--muted)"># LVNet 显存大</span>
+
+full:
+  epochs: 50
+
+<span style="color:var(--muted)"># 消融实验参数</span>
+model_params:
+  encoder_type: "stsf"   <span style="color:var(--muted)"># cnn | stsf — 改这里做消融</span>
+  mlp_type: "conv3d"     <span style="color:var(--muted)"># mlp | conv3d</span>
+  block_type: "decoupled" <span style="color:var(--muted)"># swin | decoupled</span>
+
+segmentation:            <span style="color:var(--muted)"># 分割任务参数</span>
+  num_frame: 4
+  img_size: 512</pre>
+</div>
+
+<div class="tip">
+  <strong>消融实验工作流</strong>：改 <code>tasks/xxx/config.yaml</code> 的一个参数 → <code>python train.py --task xxx --fast</code> → MLflow UI 对比曲线。每次改一个变量，MLflow 自动记录全部参数，消融结论一目了然。
+</div>
+
+<!-- ============================================================ -->
+<h2>4. 新建一个分类项目</h2>
 
 <div class="card">
 <h3>第 1 步：复制模板</h3>
@@ -192,7 +247,7 @@ DEFAULT_MODEL = "my_model"</pre>
 </div>
 
 <!-- ============================================================ -->
-<h2>4. 新建一个分割项目（声纳/红外检测）</h2>
+<h2>5. 新建一个分割项目（声纳/红外检测）</h2>
 
 <p>分割任务和分类任务的区别只有 3 处：</p>
 
@@ -227,34 +282,51 @@ DEFAULT_MODEL = "my_model"</pre>
 </div>
 
 <!-- ============================================================ -->
-<h2>5. 修改配置文件</h2>
+<h2>6. 修改配置文件</h2>
+
+<p>全局 <code>config.yaml</code> 基本不动。日常只改 <code>tasks/xxx/config.yaml</code>：</p>
 
 <div class="card">
-<pre><span style="color:var(--muted)"># 项目元信息 — MLflow 实验名</span>
-project:
-  name: <strong>"ir-detection"</strong>
-  tags:
-    framework: "pytorch"
-    owner: <strong>"your-name"</strong>
+<h3>分类任务配置</h3>
+<pre><span style="color:var(--muted)"># tasks/my_project/config.yaml</span>
 
-<span style="color:var(--muted)"># 快速验证</span>
 fast:
   model_name: <strong>"my_model"</strong>
-  dataset_name: <strong>"my_dataset"</strong>   <span style="color:var(--muted)"># 留空则用 DEFAULT_DATASET</span>
+  dataset_name: <strong>"my_dataset"</strong>
+  epochs: 3
+  data_fraction: 0.1
 
-<span style="color:var(--muted)"># 全量训练</span>
 full:
   model_name: <strong>"my_model"</strong>
   dataset_name: <strong>"my_dataset"</strong>
+  epochs: 50</pre>
+</div>
 
-<span style="color:var(--muted)"># 分割任务（分类任务忽略此段）</span>
+<div class="card">
+<h3>分割任务配置（含消融参数）</h3>
+<pre><span style="color:var(--muted)"># tasks/sonar_detection/config.yaml</span>
+
+fast:
+  model_name: "lvnet_tiny"
+  dataset_name: "sonar_e2e"
+  batch_size: 1
+
+full:
+  epochs: 50
+
+<span style="color:var(--muted)"># 消融实验：每次改一个值，跑 --fast 对比</span>
+model_params:
+  encoder_type: "stsf"       <span style="color:var(--muted)"># 改这里 → MLflow 记录 → UI 对比</span>
+  mlp_type: "conv3d"
+  block_type: "decoupled"
+
 segmentation:
   num_frame: 4
   img_size: 512</pre>
 </div>
 
 <!-- ============================================================ -->
-<h2>6. 完整工作流</h2>
+<h2>7. 完整工作流</h2>
 
 <div class="card"><h3>Step 1：快速验证</h3>
 <pre>python train.py --task my_project --fast</pre>
@@ -308,7 +380,7 @@ python train.py --task my_project --resume                <span style="color:var
 </div>
 
 <!-- ============================================================ -->
-<h2>7. 数据指纹</h2>
+<h2>8. 数据指纹</h2>
 
 <p>每次训练前，系统对数据集前 100 个样本计算 MD5 哈希，记录在 MLflow 标签里。</p>
 <ul style="color:var(--muted); margin-left:20px;">
@@ -317,7 +389,7 @@ python train.py --task my_project --resume                <span style="color:var
 </ul>
 
 <!-- ============================================================ -->
-<h2>8. 常见问题</h2>
+<h2>9. 常见问题</h2>
 
 <div class="warn">
   <strong>Q: mlruns/ 下面没有 meta.yaml？</strong><br>

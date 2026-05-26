@@ -13,7 +13,7 @@ description: |
 
 ```
 分析项目 → 创建 tasks/<name>/ → 写 model.py → 写 dataset.py
-→ 复制依赖 → 更新 config.yaml → 验证
+→ 复制依赖 → 创建 tasks/<name>/config.yaml → 验证
 ```
 
 ## 步骤 1：分析项目
@@ -212,25 +212,55 @@ from .external_model import ExternalModel  # 正确
 from external_model import ExternalModel   # 错误，找不到
 ```
 
-## 步骤 7：更新 config.yaml
+## 步骤 7：创建任务级配置文件
+
+**不要改全局 `config.yaml`**。在任务目录下创建 `tasks/<name>/config.yaml`：
 
 ```yaml
-project:
-  name: "my-project"  # MLflow 实验名
+# tasks/your_task/config.yaml
 
-full:
-  model_name: "your_model_name"    # 和 @register_model 一致
+# 快速验证模式默认值
+fast:
+  model_name: "your_model_name"     # 和 @register_model 一致
   dataset_name: "your_dataset_name"  # 和 @register_dataset 一致
+  epochs: 3
+  batch_size: 32
+  data_fraction: 0.1
+
+# 全量训练模式默认值
+full:
+  model_name: "your_model_name"
+  dataset_name: "your_dataset_name"
   epochs: 100
   batch_size: 32
-
-# 分割任务额外加这段
-segmentation:
-  num_frame: 4
-  img_size: 512
-  train_split: "train.txt"
-  val_split: "val.txt"
+  data_fraction: 1.0
 ```
+
+**对于分割任务**，额外添加：
+
+```yaml
+# 模型消融参数（每次实验改一个值）
+model_params:
+  encoder_type: "stsf"       # 架构变体
+  mlp_type: "conv3d"
+  block_type: "decoupled"
+  use_checkpoint: false
+  drop_path_rate: 0.2
+
+# 数据集分割参数
+segmentation:
+  num_frame: 4               # 输入帧数
+  img_size: 512               # 图像尺寸
+  train_split: "train1.txt"   # 训练标注文件
+  val_split: "val_new.txt"    # 验证标注文件
+  test_split: "val_new.txt"   # 测试标注文件
+
+# 损失函数参数
+loss_params:
+  alpha: 0.5                  # Dice/BCE 权重
+```
+
+配置合并规则：`tasks/<name>/config.yaml` 的值覆盖全局 `config.yaml` 的同名字段。`train.py` / `evaluate.py` / `export.py` 自动合并，无需手动处理。
 
 ## 步骤 8：验证
 
@@ -273,5 +303,7 @@ python train.py --task your_task --fast
 - 数据集 `SonarFrameDataset` 从 txt 读取路径，堆叠 4 帧为输入
 - 输入形状 `(1, 1, 4, 512, 512)`，模型参数量 1.92M
 - 复制 `LVNet.py`、`muon.py`、`sonar_utils.py` 到任务目录
+- **创建 `tasks/sonar_detection/config.yaml`**，内含 `model_params` 消融参数和 `segmentation` 分割参数
 
 **结果：** `python train.py --task sonar_detection --fast` 可直接训练，MLflow 自动记录 IoU 指标。
+消融实验只需改 `tasks/sonar_detection/config.yaml` 中 `model_params` 的一个值，MLflow 自动对比。
