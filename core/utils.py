@@ -44,6 +44,34 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def load_merged_config(global_config_path: str, task_name: str) -> dict:
+    """
+    加载全局配置，然后合并任务级配置。
+
+    合并顺序: 全局 config.yaml → tasks/<task>/config.yaml（后者覆盖前者）
+
+    参数:
+        global_config_path: 全局 config.yaml 路径
+        task_name:          任务目录名
+
+    返回:
+        dict: 合并后的配置
+    """
+    config = load_config(global_config_path)
+
+    task_config_path = os.path.join("tasks", task_name, "config.yaml")
+    if os.path.exists(task_config_path):
+        task_config = load_config(task_config_path)
+        # 浅合并：任务配置覆盖全局配置的同名字段
+        for key, value in task_config.items():
+            if isinstance(value, dict) and isinstance(config.get(key), dict):
+                config[key].update(value)
+            else:
+                config[key] = value
+
+    return config
+
+
 def save_checkpoint(model: torch.nn.Module, optimizer, epoch: int,
                      metrics: dict, path: str):
     """

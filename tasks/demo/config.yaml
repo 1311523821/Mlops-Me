@@ -1,0 +1,15 @@
+# demo 任务默认配置 — MNIST + SimpleCNN
+
+fast:
+  data_fraction: 0.1
+  epochs: 3
+  batch_size: 32
+  model_name: "simple_cnn"
+  dataset_name: "mnist"
+
+full:
+  data_fraction: 1.0
+  epochs: 20
+  batch_size: 64
+  model_name: "simple_cnn"
+  dataset_name: "mnist"

@@ -1,0 +1,15 @@
+# image_classification 任务默认配置 — CIFAR-10 / ImageFolder
+
+fast:
+  data_fraction: 0.1
+  epochs: 3
+  batch_size: 32
+  model_name: "resnet18"
+  dataset_name: "cifar10"
+
+full:
+  data_fraction: 1.0
+  epochs: 50
+  batch_size: 64
+  model_name: "resnet18"
+  dataset_name: "cifar10"

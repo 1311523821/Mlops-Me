@@ -1,0 +1,37 @@
+# sonar_detection 任务默认配置 — LVNet 多帧声纳小目标检测
+
+fast:
+  data_fraction: 0.1
+  epochs: 3
+  batch_size: 1            # LVNet 显存大，batch 设为 1
+  model_name: "lvnet_tiny"
+  dataset_name: "sonar_e2e"
+
+full:
+  data_fraction: 1.0
+  epochs: 50
+  batch_size: 1
+  model_name: "lvnet_tiny"
+  dataset_name: "sonar_e2e"
+
+# ---------- 分割参数 ----------
+segmentation:
+  num_frame: 4              # 输入帧数
+  img_size: 512              # 图像尺寸
+  train_split: "train1.txt"  # 训练集标注文件
+  val_split: "val_new.txt"   # 验证集标注文件
+  test_split: "val_new.txt"  # 测试集标注文件
+
+# ---------- 模型消融参数 ----------
+# 每次消融实验改这里的一个值，MLflow 自动记录和对比
+model_params:
+  encoder_type: "stsf"       # cnn | stsf
+  mlp_type: "conv3d"         # mlp | conv3d
+  block_type: "decoupled"    # swin | decoupled
+  use_checkpoint: false
+  drop_path_rate: 0.2
+  frozen_stages: -1
+
+# ---------- 损失函数参数 ----------
+loss_params:
+  alpha: 0.5                 # Dice/BCE 权重

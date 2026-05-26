@@ -16,7 +16,7 @@ import importlib
 import os
 from torch.utils.data import DataLoader
 from ruamel.yaml import YAML
-from core.utils import load_config, get_device, compute_data_fingerprint, get_git_hash, build_run_name
+from core.utils import load_config, load_merged_config, get_device, compute_data_fingerprint, get_git_hash, build_run_name
 from core.registry import MODELS, DATASETS
 from core.trainer import Trainer
 
@@ -33,17 +33,8 @@ def main():
                         help="从上次中断的 checkpoint 恢复训练")
     args = parser.parse_args()
 
-    # ---------- 1. 加载配置 ----------
-    config = load_config(args.config)
-
-    # 传递任务特定参数（分割任务的帧数、图像尺寸等）
-    seg_cfg = config.get("segmentation", {})
-    if seg_cfg:
-        config.setdefault("_num_frame", seg_cfg.get("num_frame", 4))
-        config.setdefault("_img_size", seg_cfg.get("img_size", 512))
-        config.setdefault("_train_split", seg_cfg.get("train_split", "train1.txt"))
-        config.setdefault("_val_split", seg_cfg.get("val_split", "val_new.txt"))
-        config.setdefault("_test_split", seg_cfg.get("test_split", "val_new.txt"))
+    # ---------- 1. 加载配置（全局 + 任务级合并） ----------
+    config = load_merged_config(args.config, args.task)
 
     # ---------- 2. --fast 模式覆盖参数 ----------
     if args.fast:

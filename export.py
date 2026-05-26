@@ -22,7 +22,7 @@ import torch
 import onnx
 import onnxruntime as ort
 
-from core.utils import load_config, get_device, load_checkpoint
+from core.utils import load_merged_config, get_device, load_checkpoint
 from core.registry import MODELS, DATASETS
 
 
@@ -52,8 +52,8 @@ def main():
                         help="ONNX opset 版本（默认使用 config.yaml 中的值）")
     args = parser.parse_args()
 
-    # ---------- 1. 加载配置 ----------
-    config = load_config(args.config)
+    # ---------- 1. 加载配置（全局 + 任务级合并） ----------
+    config = load_merged_config(args.config, args.task)
     config["_task_name"] = args.task
 
     # ---------- 2. 导入任务模块 ----------

@@ -1,11 +1,11 @@
 # ============================================================
-# MLOps 工作流 — 全局配置文件
+# MLOps 工作流 — 全局配置（所有任务共享）
+# 每个任务自己的默认参数在 tasks/<task>/config.yaml
 # ============================================================
 
 # ---------- 项目元信息 ----------
-# 每次训练时自动记录到 MLflow，用于区分不同项目
 project:
-  name: "mlops-workflow"       # 项目名称，对应 MLflow 实验名
+  name: "mlops-workflow"       # MLflow 实验名
   description: "通用深度学习工作流"
   tags:
     framework: "pytorch"
@@ -13,48 +13,22 @@ project:
 
 # ---------- 路径配置 ----------
 paths:
-  data_dir: "./data"           # 数据集存放目录（MNIST 等会自动下载到这里）
-  output_dir: "./outputs"      # 模型、图表、ONNX 文件的输出根目录
-  mlflow_uri: "sqlite:///mlflow.db"  # MLflow 追踪数据库（SQLite 后端）
+  data_dir: "./data"           # 数据集存放目录
+  output_dir: "./outputs"      # 模型、图表、ONNX 的输出根目录
+  mlflow_uri: "sqlite:///mlflow.db"  # MLflow 追踪数据库
 
 # ---------- 设备配置 ----------
 device:
-  gpu_id: 0                   # GPU 编号（单 GPU 场景默认为 0）
-  use_cuda: true              # 是否使用 CUDA（无 GPU 时自动回退 CPU）
+  gpu_id: 0
+  use_cuda: true
 
-# ---------- 快速验证模式 ----------
-# 触发方式: python train.py --task xxx --fast
-fast:
-  data_fraction: 0.1          # 只使用 10% 的训练数据
-  epochs: 3                   # 只训练 3 个 epoch
-  batch_size: 32
-  model_name: "simple_cnn"    # 使用轻量模型
-  dataset_name: ""            # 留空则自动选第一个已注册的数据集
-
-# ---------- 全量训练模式 ----------
-# 触发方式: python train.py --task xxx（不加 --fast）
-full:
-  data_fraction: 1.0          # 使用全部数据
-  epochs: 50                  # 完整训练
-  batch_size: 64
-  model_name: "resnet18"
-  dataset_name: ""            # 留空则自动选第一个已注册的数据集
-
-# ---------- 训练超参数 ----------
+# ---------- 训练超参数默认值 ----------
 training:
   learning_rate: 0.001
-  optimizer: "adam"           # "adam" 或 "sgd"
+  optimizer: "adam"            # adam | sgd
   weight_decay: 0.0001
   early_stopping_patience: 10
 
-# ---------- 分割任务参数（sonar_detection 等） ----------
-segmentation:
-  num_frame: 4                # 输入帧数（LVNet 多帧输入）
-  img_size: 512               # 图像尺寸
-  train_split: "train1.txt"   # 训练集标注文件
-  val_split: "val_new.txt"    # 验证集标注文件
-  test_split: "val_new.txt"   # 测试集标注文件
-
-# ---------- ONNX 导出配置 ----------
+# ---------- ONNX 导出 ----------
 export:
-  onnx_opset: 14              # ONNX opset 版本
+  onnx_opset: 14

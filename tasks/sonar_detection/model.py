@@ -51,12 +51,20 @@ class LVNetWrapper(BaseModel):
 
     task_type: str = "segmentation"
 
-    def __init__(self, num_frame: int = 4, embed_dim: int = 24,
-                 depths: list = None, num_heads: list = None,
-                 window_size: tuple = (4, 7, 7)):
+    def __init__(self, num_frame=4, embed_dim=24, depths=None,
+                 num_heads=None, window_size=(4, 7, 7),
+                 encoder_type="stsf", mlp_type="conv3d",
+                 block_type="decoupled", use_checkpoint=False,
+                 drop_path_rate=0.2, frozen_stages=-1,
+                 loss_alpha=0.5):
         super().__init__()
-        # 从同目录导入 LVNet（从 e2e 项目复制而来）
-        from .LVNet import LVNet as _LVNet
+        # LVNet.py 内部有绝对导入（from LVNet import ...），
+        # 需要把当前目录临时加入 sys.path
+        import sys, os
+        _here = os.path.dirname(os.path.abspath(__file__))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        from LVNet import LVNet as _LVNet
 
         depths = depths or [2, 2, 2, 1]
         num_heads = num_heads or [3, 6, 12, 24]
@@ -67,28 +75,42 @@ class LVNetWrapper(BaseModel):
             depths=depths,
             num_heads=num_heads,
             window_size=window_size,
+            encoder_type=encoder_type,
+            mlp_type=mlp_type,
+            block_type=block_type,
+            use_checkpoint=use_checkpoint,
+            drop_path_rate=drop_path_rate,
+            frozen_stages=frozen_stages,
         )
 
         self.num_frame = num_frame
         self.input_channels = 1
         self.input_size = 512
+        self.loss_alpha = loss_alpha
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # 数据集输出 (B, C, D, H, W)，LVNet 内部 rearrange 到 (B*D, C, H, W)
         return self.net(x)
 
     def get_example_input(self) -> torch.Tensor:
-        """多帧输入: (B=1, C=1, D=4, H=512, W=512)"""
         return torch.randn(1, self.input_channels, self.num_frame,
                            self.input_size, self.input_size)
 
     def get_loss_fn(self) -> nn.Module:
-        return DiceFocalLoss()
+        return DiceFocalLoss(alpha=self.loss_alpha)
 
     @classmethod
     def from_config(cls, config: dict) -> "LVNetWrapper":
-        train_cfg = config.get("training", {})
+        seg_cfg = config.get("segmentation", {})
+        mp = config.get("model_params", {})
+        lp = config.get("loss_params", {})
         return cls(
-            num_frame=config.get("_num_frame", 4),
-            embed_dim=train_cfg.get("embed_dim", 24),
+            num_frame=seg_cfg.get("num_frame", 4),
+            embed_dim=mp.get("embed_dim", 24),
+            encoder_type=mp.get("encoder_type", "stsf"),
+            mlp_type=mp.get("mlp_type", "conv3d"),
+            block_type=mp.get("block_type", "decoupled"),
+            use_checkpoint=mp.get("use_checkpoint", False),
+            drop_path_rate=mp.get("drop_path_rate", 0.2),
+            frozen_stages=mp.get("frozen_stages", -1),
+            loss_alpha=lp.get("alpha", 0.5),
         )
