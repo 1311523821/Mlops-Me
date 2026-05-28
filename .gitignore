@@ -33,6 +33,9 @@ venv/
 # 测试工件
 *-workspace/
 
+# Superpowers（头脑风暴会话数据，不提交）
+.superpowers/
+
 # 系统
 .DS_Store
 Thumbs.db

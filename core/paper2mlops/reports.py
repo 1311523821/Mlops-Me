@@ -112,8 +112,8 @@ def render_report_html(report: dict) -> str:
     escaped_task_name = html.escape(str(report['task_name']))
     escaped_task_type = html.escape(str(report['task_type']))
     json_report_data = json.dumps(report, ensure_ascii=False).replace('</', '<\\/')
-    # JS 上下文安全的 task_name（供 onclick 属性使用）
-    json_task_name = html.escape(json.dumps(report['task_name']))
+    # json.dumps 产生双引号包裹的合法 JS 字符串，替换单引号防止越出单引号 attribute
+    json_task_name = json.dumps(report['task_name']).replace("'", "\\u0027")
 
     html_output = f"""<h2>📋 分析报告：{escaped_task_name}</h2>
 <p class="subtitle">来源：{" + ".join(f"<a href='{html.escape(str(v), quote=True)}'>{html.escape(str(k))}</a>" for k, v in report.get("source", {}).items() if v)} | 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
