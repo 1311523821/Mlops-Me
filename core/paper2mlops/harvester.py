@@ -1,10 +1,8 @@
 """输入获取工具 — 从 arXiv/GitHub/网页/本地文件获取论文和代码。"""
 
 import subprocess
-import tempfile
 import os
 import re
-from pathlib import Path
 
 try:
     import arxiv
@@ -89,7 +87,12 @@ def _fetch_arxiv(arxiv_id: str, output_dir: str) -> dict:
 
     client = arxiv.Client()
     search = arxiv.Search(id_list=[arxiv_id])
-    paper = next(client.results(search))
+    try:
+        paper = next(client.results(search))
+    except StopIteration:
+        raise ValueError(f"arXiv 上未找到 ID: {arxiv_id}")
+    except Exception as e:
+        raise ConnectionError(f"arXiv API 请求失败 ({arxiv_id}): {e}")
 
     pdf_path = os.path.join(output_dir, f"{arxiv_id}.pdf")
     paper.download_pdf(dirpath=output_dir, filename=f"{arxiv_id}.pdf")
@@ -119,7 +122,7 @@ def _clone_repo(url: str, output_dir: str) -> dict:
         return {"type": "github", "repo_path": target, "source_url": url}
     subprocess.run(
         ["git", "clone", "--depth", "1", url, target],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=120,
     )
     return {"type": "github", "repo_path": target, "source_url": url}
 
