@@ -1,4 +1,5 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+# 第三方代码，来自 Ultralytics YOLO 项目的 Muon 优化器实现，保留原始注释
 
 from __future__ import annotations
 

@@ -166,7 +166,7 @@ def main_process_example():
     
     # 模拟输入数据
     mock_prob_map = np.random.rand(512, 512) # 你的推理输出
-    mock_txt_path = r"E:\AI\Code\WorkCode\Multi-beam\DataProcess\day1\testing\yuan\DataRecord_2025-12-08_110354\0585.txt"               # 对应的元数据
+    mock_txt_path = "./data/example_metadata/0585.txt"  # 元数据文件路径（示例占位）
     
     # --- 开始计算 ---
     
@@ -186,4 +186,6 @@ def main_process_example():
         print(f"  位置: X={res['pos_m'][0]:.2f}m, Y={res['pos_m'][1]:.2f}m")
         print(f"  尺寸: 长度={res['length_m']:.2f}m, 面积={res['area_m2']:.4f}m2")
         print(f"  速度: {res['speed_m_s']:.2f} m/s")
-main_process_example()
+
+if __name__ == "__main__":
+    main_process_example()
