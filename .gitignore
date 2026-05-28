@@ -30,6 +30,9 @@ venv/
 !.claude/skills/
 .spec-workflow/
 
+# 测试工件
+*-workspace/
+
 # 系统
 .DS_Store
 Thumbs.db
