@@ -29,6 +29,19 @@ class Trainer:
     def __init__(self, model: nn.Module, train_loader: DataLoader,
                  val_loader: DataLoader, config: dict,
                  resume_from: str = None):
+        """
+        参数:
+            model:        模型实例（需实现 get_loss_fn() 以声明任务 loss）
+            train_loader: 训练集 DataLoader
+            val_loader:   验证集 DataLoader
+            config:       配置字典（需含 training.*、paths.output_dir、_task_name）
+            resume_from:  checkpoint 路径（断点续训），为 None 则从头训练
+
+        关键决策:
+            - loss 函数由 model.get_loss_fn() 获取，Trainer 不硬编码任务类型
+            - task_type 从 model.task_type 读取，决定验证指标的计算方式
+            - early stopping 以 val_loss 为基准（所有任务通用）
+        """
         self.config = config
         self.device = get_device(config)
         self.model = model.to(self.device)
@@ -84,7 +97,21 @@ class Trainer:
         self.patience_counter = 0
 
     def train(self) -> dict:
-        """执行完整训练流程。"""
+        """
+        执行完整训练循环。
+
+        流程:
+            1. 配置 MLflow tracking URI 和 experiment（以 project.name 命名）
+            2. 记录参数（模型名、数据集、学习率、batch size、loss 函数、task_type）
+            3. 记录标签（项目标签 + 数据指纹 + Git commit）
+            4. 逐 epoch 训练 + 验证，记录 train_loss + val_loss + 任务相关指标
+            5. 以 val_loss 为基准做 early stopping（对所有任务类型通用）
+            6. 每次 val_loss 刷新时保存 best_model.pth
+            7. 训练结束时将最佳模型上传为 MLflow artifact
+
+        返回:
+            dict: {"best_val_loss": float} —— 训练过程中最低验证 loss
+        """
         # ---- MLflow 设置 ----
         mlflow_uri = self.config.get("paths", {}).get("mlflow_uri", "sqlite:///mlflow.db")
         mlflow.set_tracking_uri(mlflow_uri)

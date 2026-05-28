@@ -1,0 +1,55 @@
+{
+  "skill_name": "add-mlops-project",
+  "iteration": 1,
+  "results": [
+    {
+      "config": "eval-classification with_skill",
+      "pass_rate": 1.0,
+      "passed": 13,
+      "total": 13,
+      "duration_s": 69.6,
+      "tokens": 52632
+    },
+    {
+      "config": "eval-classification without_skill",
+      "pass_rate": 1.0,
+      "passed": 13,
+      "total": 13,
+      "duration_s": 101.7,
+      "tokens": 62227
+    },
+    {
+      "config": "eval-segmentation with_skill",
+      "pass_rate": 1.0,
+      "passed": 12,
+      "total": 12,
+      "duration_s": 92.9,
+      "tokens": 70012
+    },
+    {
+      "config": "eval-segmentation without_skill",
+      "pass_rate": 1.0,
+      "passed": 12,
+      "total": 12,
+      "duration_s": 152.2,
+      "tokens": 74907
+    },
+    {
+      "config": "eval-unusual-data with_skill",
+      "pass_rate": 1.0,
+      "passed": 10,
+      "total": 10,
+      "duration_s": 154.4,
+      "tokens": 70618
+    },
+    {
+      "config": "eval-unusual-data without_skill",
+      "pass_rate": 1.0,
+      "passed": 10,
+      "total": 10,
+      "duration_s": 102.9,
+      "tokens": 60329
+    }
+  ],
+  "summary": "All 6 configs: average pass rate 100%"
+}

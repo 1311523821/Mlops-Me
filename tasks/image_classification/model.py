@@ -26,6 +26,15 @@ class _TorchvisionWrapper(BaseModel):
 
     def __init__(self, model_name: str, num_classes: int,
                  input_channels: int = 3, pretrained: bool = True):
+        """
+        通过 getattr 动态获取 torchvision 模型，替换首层和末层适配自定义任务。
+
+        参数:
+            model_name:     torchvision 模型函数名（如 "resnet18", "efficientnet_b0"）
+            num_classes:    输出类别数
+            input_channels: 输入通道数（≠3 时替换第一层 Conv2d，保持 kernel/stride/padding 不变）
+            pretrained:     是否加载 ImageNet 预训练权重
+        """
         super().__init__()
         self.model_name = model_name
         self.num_classes = num_classes
@@ -68,7 +77,7 @@ class _TorchvisionWrapper(BaseModel):
 
     @classmethod
     def from_config(cls, config: dict) -> "BaseModel":
-        # 默认用 resnet18
+        """从配置构建模型，默认使用 resnet18，类别数和通道数从 config 读取。"""
         return cls(
             model_name="resnet18",
             num_classes=config.get("_num_classes", 10),

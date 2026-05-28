@@ -24,10 +24,24 @@ class DiceFocalLoss(nn.Module):
         self.smooth = smooth
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        # BCE（带 logits）
+        """
+        Dice + BCE 混合损失，用于极微弱小目标分割。
+
+        loss = alpha * BCE + (1-alpha) * Dice
+        - BCE 使用 binary_cross_entropy_with_logits（内置 sigmoid，数值稳定）
+        - Dice = 1 - (2*|pred∩target|+smooth) / (|pred|+|target|+smooth)
+
+        参数:
+            logits:  模型原始输出（未经过 sigmoid），形状任意
+            targets: 二值标签，与 logits 同形状
+
+        返回:
+            torch.Tensor: 标量损失值
+        """
+        # BCE（带 logits，内置 sigmoid，数值稳定）
         bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="mean")
 
-        # Dice
+        # Dice：先 sigmoid 得到概率，再计算交并比
         probs = torch.sigmoid(logits)
         intersection = (probs * targets).sum()
         union = probs.sum() + targets.sum()
@@ -100,6 +114,13 @@ class LVNetWrapper(BaseModel):
 
     @classmethod
     def from_config(cls, config: dict) -> "LVNetWrapper":
+        """
+        从配置字典构建 LVNetWrapper。参数来源三个子段：
+
+        config["segmentation"] → num_frame
+        config["model_params"]  → embed_dim, encoder_type, mlp_type, block_type 等
+        config["loss_params"]   → alpha
+        """
         seg_cfg = config.get("segmentation", {})
         mp = config.get("model_params", {})
         lp = config.get("loss_params", {})

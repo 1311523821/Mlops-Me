@@ -142,6 +142,12 @@ class SonarFrameDataset(BaseDataset):
 
     @classmethod
     def from_config(cls, config: dict, split: str) -> "SonarFrameDataset":
+        """
+        split 到标注文件的映射:
+            "train" → _train_split（默认 train1.txt）
+            "val"   → _val_split（默认 val_new.txt）
+            "test"  → _test_split（默认 val_new.txt）
+        """
         data_dir = config.get("paths", {}).get("data_dir", "./data")
         data_fraction = config.get("_data_fraction", 1.0)
 

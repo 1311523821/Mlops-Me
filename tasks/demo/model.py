@@ -56,6 +56,7 @@ class SimpleCNN(BaseModel):
 
     @classmethod
     def from_config(cls, config: dict) -> "SimpleCNN":
+        """从配置构建 SimpleCNN，类别数从 _num_classes 读取，dropout 从 training 段读取。"""
         train_cfg = config.get("training", {})
         return cls(
             num_classes=config.get("_num_classes", 10),

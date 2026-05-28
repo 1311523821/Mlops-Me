@@ -33,6 +33,12 @@ class ImageFolderDataset(BaseDataset):
 
     def __init__(self, root_dir: str, data_fraction: float = 1.0,
                  image_size: int = 224):
+        """
+        参数:
+            root_dir:      数据根目录，子目录名为类别（ImageFolder 格式）
+            data_fraction: 使用数据的比例（--fast 模式设为 < 1.0）
+            image_size:    图像缩放尺寸，默认 224×224
+        """
         self.root_dir = root_dir
         self.data_fraction = data_fraction
         self.image_size = image_size

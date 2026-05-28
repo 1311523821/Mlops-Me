@@ -135,8 +135,6 @@ def main():
     except ModuleNotFoundError as e:
         print(f"错误: 找不到任务模块 'tasks.{args.task}'")
         return
-        task_default_dataset = ""
-        task_default_model = ""
 
     # ---------- 3. 确定输出目录和模型路径 ----------
     output_dir = os.path.join(

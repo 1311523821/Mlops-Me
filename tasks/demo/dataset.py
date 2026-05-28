@@ -75,6 +75,9 @@ class MNISTDataset(BaseDataset):
 
     @classmethod
     def from_config(cls, config: dict, split: str) -> "MNISTDataset":
+        """
+        split 映射: "train" → MNIST 训练集，"val"/"test" → MNIST 测试集。
+        """
         data_dir = config.get("paths", {}).get("data_dir", "./data")
         data_fraction = config.get("_data_fraction", 1.0)
 

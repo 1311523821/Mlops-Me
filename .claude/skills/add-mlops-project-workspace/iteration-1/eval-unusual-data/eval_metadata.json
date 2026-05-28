@@ -1,0 +1,17 @@
+{
+  "eval_id": 2,
+  "eval_name": "unusual-data-integration",
+  "prompt": "\u96c6\u6210 JSON \u6807\u6ce8\u7684\u58f0\u7eb3\u56fe\u50cf\u5206\u7c7b\u9879\u76ee\u5230 MLOps",
+  "assertions": [
+    "model.py \u5305\u542b @register_model \u88c5\u9970\u5668",
+    "model.py \u7ee7\u627f BaseModel",
+    "dataset.py \u5305\u542b @register_dataset \u88c5\u9970\u5668",
+    "dataset.py \u7ee7\u627f BaseDataset",
+    "dataset.py \u4ece JSON \u6587\u4ef6\u52a0\u8f7d\u6570\u636e\u6807\u6ce8",
+    "dataset.py \u5b9e\u73b0\u4e86 get_preprocess_config()",
+    "get_preprocess_config \u6839\u636e\u5b9e\u9645\u6570\u636e\u8bbe\u7f6e\u4e86 channels \u548c size",
+    "__init__.py \u58f0\u660e\u4e86 DEFAULT_MODEL \u548c DEFAULT_DATASET",
+    "config.yaml \u5305\u542b fast \u548c full \u6bb5",
+    "\u6ca1\u6709\u786c\u7f16\u7801\u4e0d\u5b58\u5728\u7684\u53c2\u6570\uff08\u5982 num_frame \u7b49 LVNet \u4e13\u5c5e\u53c2\u6570\uff09"
+  ]
+}
