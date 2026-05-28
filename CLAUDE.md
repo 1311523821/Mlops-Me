@@ -69,3 +69,60 @@ python export.py --task xxx         # ONNX 导出 + preprocess.json
 - 改动 `core/` 后跑 `demo` 确保向后兼容
 - 测试用例放在任务描述中或 `tests/` 目录下
 - 测试失败不继续后续步骤，先修复再推进
+
+## 代码审查
+
+每次提交或合并前，**必须用 subagent 做代码审查**。审查员独立检查代码，不和实现者共享上下文，避免"盲点传染"。
+
+### 审查时机
+- 新任务完成 → 审查 `tasks/<name>/` 全部文件
+- 修改 `core/` → 审查 core/ + 跑 demo 验证兼容
+- 提交前 → 审查本次 diff 中的所有文件
+
+### 审查标准（subagent 用以下 prompt）
+
+```
+审查本次改动，按以下清单逐项检查，报告通过 / 不通过的项：
+
+1. 低耦合检查
+   - core/ 是否包含具体任务名、模型名、数据集名？（有则违规）
+   - tasks/xxx/model.py 是否只定义模型，不包含训练循环？（包含则违规）
+   - 入口脚本是否只做编排，不写业务逻辑？
+
+2. 硬编码检查
+   - 模型参数是否从 config 读取而非写死在代码里？
+   - 预处理参数（mean/std/size）是否从原代码提取而非编造？
+   - task_type、loss 函数是否正确声明？
+
+3. 接口合规
+   - model.py：是否继承 BaseModel、实现 get_example_input()、from_config()？
+   - dataset.py：是否继承 BaseDataset、实现 num_classes、from_config()？
+   - 分割任务是否重写 get_loss_fn()？
+   - 是否用 @register_model / @register_dataset 装饰器注册？
+
+4. 安全隐患
+   - 是否有硬编码的 token、密码、API key、内网 IP？
+   - gitignore 是否覆盖 data/、outputs/、mlflow.db、.env？
+
+5. 测试验证
+   - 新任务的导入链和前向传播是否通过？
+   - 改动 core/ 后 demo 任务是否向后兼容？
+
+6. 代码质量
+   - 注释是否用简体中文？
+   - 变量命名是否语义清晰？
+```
+
+### 使用方式
+
+```
+# 提交前审查
+Agent(subagent_type="feature-dev:code-reviewer", description="审查本次改动",
+prompt="审查本次 diff 中的改动，按 CLAUDE.md 的审查清单逐项检查。")
+
+# 新任务审查
+Agent(subagent_type="feature-dev:code-reviewer", description="审查新任务 xxx",
+prompt="审查 tasks/xxx/ 下所有文件是否合规。审查清单见 CLAUDE.md。")
+```
+
+审查报告中有任何 ❌ 项，先修复再提交。
