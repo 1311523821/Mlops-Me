@@ -1,7 +1,20 @@
 """代码生成器 — 根据分析报告生成 MLOps tasks/<name>/ 全部文件。"""
 
 import os
+import re
 import shutil
+
+_SAFE_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]+$')
+_ALLOWED_LOSS_TYPES = {"CrossEntropyLoss", "BCEWithLogitsLoss", "DiceLoss",
+                       "FocalLoss", "MSELoss", "L1Loss", "CTCLoss", "KLDivLoss"}
+
+
+def _validate_task_name(name: str) -> None:
+    if not _SAFE_NAME_RE.match(name):
+        raise ValueError(
+            f"非法的任务名: {name!r}，只允许 a-z A-Z 0-9 _ -")
+    if ".." in name or "/" in name or "\\" in name:
+        raise ValueError(f"任务名不能包含路径分隔符: {name!r}")
 
 
 def generate_task(task_name: str, report: dict, output_base: str) -> list[str]:
@@ -16,6 +29,7 @@ def generate_task(task_name: str, report: dict, output_base: str) -> list[str]:
     返回:
         生成的文件路径列表
     """
+    _validate_task_name(task_name)
     task_dir = os.path.join(output_base, "tasks", task_name)
     os.makedirs(task_dir, exist_ok=True)
 
@@ -50,10 +64,18 @@ def generate_task(task_name: str, report: dict, output_base: str) -> list[str]:
 
 def copy_dependencies(report: dict, source_repo: str, task_name: str, output_base: str) -> list[str]:
     """将外部仓库的本地依赖文件复制到任务目录。"""
+    _validate_task_name(task_name)
     task_dir = os.path.join(output_base, "tasks", task_name)
     copied = []
+    safe_repo = os.path.realpath(source_repo)
     for rel_path in report.get("dependencies", {}).get("local_files", []):
+        # 防止路径穿越
+        if ".." in rel_path or rel_path.startswith("/") or rel_path.startswith("\\"):
+            continue
         src = os.path.join(source_repo, rel_path)
+        safe_src = os.path.realpath(src)
+        if not safe_src.startswith(safe_repo + os.sep):
+            continue
         dst = os.path.join(task_dir, os.path.basename(rel_path))
         if os.path.isfile(src) and not os.path.exists(dst):
             shutil.copy2(src, dst)
@@ -72,8 +94,12 @@ DEFAULT_MODEL = "{task_name}"
 def _render_model(task_name: str, report: dict) -> str:
     model = report.get("model", {})
     class_name = model.get("class_name", "UnknownModel")
+    if not _SAFE_NAME_RE.match(class_name):
+        raise ValueError(f"非法的类名: {class_name!r}，只允许 a-z A-Z 0-9 _ -")
     loss = report.get("loss", {})
     loss_type = loss.get("type", "CrossEntropyLoss")
+    if loss_type not in _ALLOWED_LOSS_TYPES:
+        loss_type = "CrossEntropyLoss"
     task_type = report.get("task_type", "classification")
     input_shape = model.get("input_shape", [1, 3, 224, 224])
     init_params = model.get("init_params", {})
