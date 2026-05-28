@@ -5,6 +5,7 @@ import os
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 class ReportHandler(SimpleHTTPRequestHandler):
@@ -17,10 +18,17 @@ class ReportHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/confirm":
             # CSRF protection: only allow same-origin requests from localhost
             origin = self.headers.get("Origin", "")
-            if origin and not origin.startswith(("http://127.0.0.1", "http://localhost")):
-                self.send_response(403)
-                self.end_headers()
-                return
+            if origin:
+                try:
+                    hostname = urlparse(origin).hostname
+                    if hostname not in ("127.0.0.1", "localhost"):
+                        self.send_response(403)
+                        self.end_headers()
+                        return
+                except Exception:
+                    self.send_response(403)
+                    self.end_headers()
+                    return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             event = json.loads(body)

@@ -1,5 +1,6 @@
 """验证工具 — 导入链、前向传播、快速训练验证。"""
 
+import json
 import subprocess
 import sys
 import os
@@ -14,7 +15,7 @@ def validate_imports(project_root: str) -> dict:
     task_name = os.path.basename(os.getcwd())
     code = f'''
 import sys
-sys.path.insert(0, r"{project_root}")
+sys.path.insert(0, {json.dumps(project_root)})
 from core.registry import MODELS, DATASETS
 # 重新加载模块触发注册
 import importlib
@@ -22,8 +23,8 @@ for mod in list(sys.modules.keys()):
     if "tasks." in mod:
         del sys.modules[mod]
 try:
-    importlib.import_module("tasks.{task_name}.model")
-    importlib.import_module("tasks.{task_name}.dataset")
+    importlib.import_module({json.dumps(f'tasks.{task_name}.model')})
+    importlib.import_module({json.dumps(f'tasks.{task_name}.dataset')})
 except Exception as e:
     print(f"IMPORT_ERROR: {{e}}")
     raise SystemExit(1)
@@ -46,13 +47,13 @@ def validate_forward_pass(project_root: str, model_name: str) -> dict:
     """
     code = f'''
 import sys
-sys.path.insert(0, r"{project_root}")
+sys.path.insert(0, {json.dumps(project_root)})
 import importlib
-importlib.import_module("tasks.{model_name}.model")
+importlib.import_module({json.dumps(f'tasks.{model_name}.model')})
 from core.registry import MODELS
 import torch
 
-m = MODELS["{model_name}"]()
+m = MODELS[{json.dumps(model_name)}]()
 x = m.get_example_input()
 print(f"INPUT: {{list(x.shape)}}")
 with torch.no_grad():
