@@ -1,5 +1,6 @@
 """报告生成 — JSON Schema 定义 + HTML 渲染模板。"""
 
+import html
 import json
 import os
 from datetime import datetime
@@ -104,31 +105,38 @@ def render_report_html(report: dict) -> str:
             {"<br>".join(f"&nbsp;&nbsp;• {w}" for w in warnings)}
         </div>"""
 
-    pip_list = ", ".join(f"<code>{p}</code>" for p in deps.get("pip", [])) or "无"
-    local_list = ", ".join(deps.get("local_files", [])) or "无"
+    pip_list = ", ".join(f"<code>{html.escape(str(p))}</code>" for p in deps.get("pip", [])) or "无"
+    local_list = ", ".join(html.escape(str(f)) for f in deps.get("local_files", [])) or "无"
 
-    html = f"""<h2>📋 分析报告：{report['task_name']}</h2>
-<p class="subtitle">来源：{" + ".join(f"<a href='{v}'>{k}</a>" for k, v in report.get("source", {}).items() if v)} | 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    # XSS 防护：预转义用户输入
+    escaped_task_name = html.escape(str(report['task_name']))
+    escaped_task_type = html.escape(str(report['task_type']))
+    json_report_data = json.dumps(report, ensure_ascii=False).replace('</', '<\\/')
+    # JS 上下文安全的 task_name（供 onclick 属性使用）
+    json_task_name = json.dumps(report['task_name']).replace("'", "\\u0027")
+
+    html_output = f"""<h2>📋 分析报告：{escaped_task_name}</h2>
+<p class="subtitle">来源：{" + ".join(f"<a href='{html.escape(str(v), quote=True)}'>{html.escape(str(k))}</a>" for k, v in report.get("source", {}).items() if v)} | 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
 
 <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:20px;font-size:13px;line-height:1.8">
 {warning_html}
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9;width:130px"><b>任务类型</b></td><td style="padding:8px;border:1px solid #eee">{report['task_type']} <span style="font-size:11px;color:{confidence_color.get(conf.get('task_type', 'medium'))}">{confidence_badge.get(conf.get('task_type', 'medium'))}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>模型类名</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{model.get('class_name', '未知')}</span> <span style="font-size:11px">{confidence_badge.get(conf.get('model_class', 'medium'))}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>源文件</b></td><td style="padding:8px;border:1px solid #eee"><code>{model.get('source_file', '未知')}</code></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>构造函数参数</b></td><td style="padding:8px;border:1px solid #eee"><code contenteditable="true">{json.dumps(model.get('init_params', {}), ensure_ascii=False)}</code></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>输入形状</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{model.get('input_shape', '未知')}</span> <span style="font-size:11px;color:{confidence_color.get(conf.get('input_shape', 'medium'))}">{confidence_badge.get(conf.get('input_shape', 'medium'))}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>输出形状</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{model.get('output_shape', '未知')}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>Loss 函数</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{report.get('loss', {}).get('type', 'CrossEntropyLoss')}</span> <span style="font-size:11px">{confidence_badge.get(conf.get('loss_type', 'medium'))}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>类别数</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{report.get('dataset', {}).get('num_classes', '未知')}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9;width:130px"><b>任务类型</b></td><td style="padding:8px;border:1px solid #eee">{escaped_task_type} <span style="font-size:11px;color:{confidence_color.get(conf.get('task_type', 'medium'))}">{confidence_badge.get(conf.get('task_type', 'medium'))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>模型类名</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(model.get('class_name', '未知')))}</span> <span style="font-size:11px">{confidence_badge.get(conf.get('model_class', 'medium'))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>源文件</b></td><td style="padding:8px;border:1px solid #eee"><code>{html.escape(str(model.get('source_file', '未知')))}</code></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>构造函数参数</b></td><td style="padding:8px;border:1px solid #eee"><code contenteditable="true">{html.escape(json.dumps(model.get('init_params', {}), ensure_ascii=False))}</code></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>输入形状</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(model.get('input_shape', '未知')))}</span> <span style="font-size:11px;color:{confidence_color.get(conf.get('input_shape', 'medium'))}">{confidence_badge.get(conf.get('input_shape', 'medium'))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>输出形状</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(model.get('output_shape', '未知')))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>Loss 函数</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(report.get('loss', {}).get('type', 'CrossEntropyLoss')))}</span> <span style="font-size:11px">{confidence_badge.get(conf.get('loss_type', 'medium'))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9"><b>类别数</b></td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(report.get('dataset', {}).get('num_classes', '未知')))}</span></td></tr>
 </table>
 
 <b>预处理参数</b>
 <table style="width:100%;border-collapse:collapse;margin-top:8px;margin-bottom:16px">
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9;width:130px">mean</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{preprocess.get('mean')}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9">std</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{preprocess.get('std')}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9">resize</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{preprocess.get('size')}</span></td></tr>
-<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9">channels</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{preprocess.get('channels')}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9;width:130px">mean</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(preprocess.get('mean')))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9">std</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(preprocess.get('std')))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9">resize</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(preprocess.get('size')))}</span></td></tr>
+<tr><td style="padding:8px;border:1px solid #eee;background:#f9f9f9">channels</td><td style="padding:8px;border:1px solid #eee"><span contenteditable="true">{html.escape(str(preprocess.get('channels')))}</span></td></tr>
 </table>
 
 <b>依赖</b>
@@ -138,13 +146,13 @@ def render_report_html(report: dict) -> str:
 </table>
 
 <div style="margin-top:16px;display:flex;gap:8px">
-  <button class="mock-button" style="background:#27ae60;color:#fff;border:none;padding:10px 20px;font-size:14px;cursor:pointer" onclick="confirmReport('{report['task_name']}')">✓ 确认，开始生成代码</button>
-  <button class="mock-button" style="padding:10px 20px;font-size:14px;cursor:pointer" onclick="confirmReport('{report['task_name']}', true)">✎ 修改后确认</button>
+  <button class="mock-button" style="background:#27ae60;color:#fff;border:none;padding:10px 20px;font-size:14px;cursor:pointer" onclick='confirmReport({json_task_name})'>✓ 确认，开始生成代码</button>
+  <button class="mock-button" style="padding:10px 20px;font-size:14px;cursor:pointer" onclick='confirmReport({json_task_name}, true)'>✎ 修改后确认</button>
 </div>
 </div>
 
 <script>
-const reportData = {json.dumps(report, ensure_ascii=False)};
+const reportData = {json_report_data};
 
 function confirmReport(taskName, modified) {{
     const edits = {{}};
@@ -162,7 +170,7 @@ function confirmReport(taskName, modified) {{
     }});
 }}
 </script>"""
-    return html
+    return html_output
 
 
 def render_review_html(review_result: dict) -> str:
@@ -176,13 +184,13 @@ def render_review_html(review_result: dict) -> str:
         items_html += f"""
         <tr>
             <td style="padding:8px;border:1px solid #eee;text-align:center">{icon}</td>
-            <td style="padding:8px;border:1px solid #eee"><b>{item['name']}</b></td>
-            <td style="padding:8px;border:1px solid #eee;font-size:12px">{item.get('detail', '')}</td>
+            <td style="padding:8px;border:1px solid #eee"><b>{html.escape(str(item['name']))}</b></td>
+            <td style="padding:8px;border:1px solid #eee;font-size:12px">{html.escape(str(item.get('detail', '')))}</td>
         </tr>"""
 
     status_badge = '<span style="background:#27ae60;color:#fff;padding:4px 10px;border-radius:12px">全部通过</span>' if all_pass else '<span style="background:#e74c3c;color:#fff;padding:4px 10px;border-radius:12px">存在问题</span>'
 
-    return f"""<h2>🔍 代码审查报告：{review_result.get('task_name', '')}</h2>
+    return f"""<h2>🔍 代码审查报告：{html.escape(str(review_result.get('task_name', '')))}</h2>
 <p class="subtitle">六项清单独立检查 {status_badge}</p>
 <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:20px">
 <table style="width:100%;border-collapse:collapse">{items_html}</table>

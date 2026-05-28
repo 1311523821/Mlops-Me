@@ -15,6 +15,12 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/confirm":
+            # CSRF protection: only allow same-origin requests from localhost
+            origin = self.headers.get("Origin", "")
+            if origin and not origin.startswith(("http://127.0.0.1", "http://localhost")):
+                self.send_response(403)
+                self.end_headers()
+                return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             event = json.loads(body)
