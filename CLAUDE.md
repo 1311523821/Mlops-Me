@@ -46,6 +46,8 @@ python deploy/app.py --model outputs/demo/model.onnx  # 推理服务
 mlflow server --backend-store-uri sqlite:///mlflow.db --port 5000
 ```
 
+- `/paper2mlops <url1> <url2> ...` — 论文/代码自动接入 MLOps（替代旧的 add-mlops-project）
+
 ## 测试规范
 
 开发新功能前，先设计测试用例。每次测试覆盖三层：
