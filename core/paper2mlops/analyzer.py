@@ -3,7 +3,6 @@
 import ast
 import os
 import re
-from pathlib import Path
 
 
 def find_model_files(repo_path: str) -> list[str]:
@@ -143,20 +142,20 @@ def detect_hardcoded_values(file_path: str) -> list[dict]:
 
     hardcoded = []
     suspicious_patterns = [
-        (r"(?<!\w)\d{2,}(?!\w)", "数字常量"),
-        (r"(?<=path\s*=\s*)[\"'][^\"']+[\"']", "路径字符串"),
-        (r"(?<=size\s*=\s*)\d+", "尺寸参数"),
+        (r"(?<!\w)\d{2,}(?!\w)", "数字常量", 0),
+        (r"path\s*=\s*([\"'][^\"']+[\"'])", "路径字符串", 1),
+        (r"size\s*=\s*(\d+)", "尺寸参数", 1),
     ]
 
     for i, line in enumerate(lines, 1):
         line_stripped = line.strip()
         if line_stripped.startswith("#") or line_stripped.startswith('"""'):
             continue
-        for pattern, desc in suspicious_patterns:
+        for pattern, desc, group_idx in suspicious_patterns:
             m = re.search(pattern, line_stripped)
             if m:
                 hardcoded.append({
-                    "value": m.group(),
+                    "value": m.group(group_idx),
                     "line": i,
                     "context": line_stripped[:80],
                     "type": desc,
